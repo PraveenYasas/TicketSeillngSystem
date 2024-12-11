@@ -17,6 +17,10 @@ public class TicketController {
 
     private int totalCus;
     private int totalVen;
+    private Thread[] vendorThreads;
+    private Thread[] customerThreads;
+
+    private boolean isSystemRunning = false;
     @PostMapping("/config")
     public String configuration(@RequestParam int totalTickets, int ticketReleaseRate, int ticketRetrievalRate, int maxTicketCapacity) {
         this.totalTickets = totalTickets;
@@ -43,19 +47,51 @@ public class TicketController {
     @PostMapping("/start")
     public String startSystem() {
 
-        if (totalVen > 0) {
-            for (int i = 0; i < totalVen; i++) {
-                Vendor vendorThread = new Vendor(ticketPool,ticketReleaseRate,totalTickets,(i+1));
-                new Thread(vendorThread).start();
+        if (isSystemRunning) {
+            return "System is already running.";
+        }
+
+        isSystemRunning = true;
+        vendorThreads = new Thread[totalVen];
+        customerThreads = new Thread[totalCus];
+
+        for (int i = 0; i < totalVen; i++) {
+            Vendor vendorThread = new Vendor(ticketPool, ticketReleaseRate, totalTickets, (i + 1));
+            vendorThreads[i] = new Thread(vendorThread);
+            vendorThreads[i].start();
+        }
+
+        for (int i = 0; i < totalCus; i++) {
+            Customer customerThread = new Customer(ticketPool, ticketRetrievalRate, (i + 1));
+            customerThreads[i] = new Thread(customerThread);
+            customerThreads[i].start();
+        }
+
+        return "System Starting";
+    }
+
+    @PostMapping("/stop")
+    public String stopSystem() {
+        if (!isSystemRunning) {
+            return "System is not running.";
+        }
+
+        isSystemRunning = false;
+
+        for (int i = 0;i < vendorThreads.length; i++) {
+            if (vendorThreads[i] != null && vendorThreads[i].isAlive()) {
+                vendorThreads[i].interrupt();
             }
         }
 
-        if (totalVen > 0) {
-            for (int i = 0; i < totalVen; i++) {
-                Customer customerThread = new Customer(ticketPool,ticketReleaseRate,(i+1));
-                new Thread(customerThread).start();
+        for (int i = 0; i < customerThreads.length; i++) {
+            if (customerThreads[i] != null && customerThreads[i].isAlive()) {
+                customerThreads[i].interrupt();
             }
         }
-        return "System Starting";
+
+        ticketPool.signalProductionComplete();
+
+        return "System Stopped";
     }
 }
